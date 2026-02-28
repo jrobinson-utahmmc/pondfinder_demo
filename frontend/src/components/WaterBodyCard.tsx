@@ -70,7 +70,7 @@ export default function WaterBodyCard({
             e.stopPropagation();
             onFindOwner?.();
           }}
-          className="text-xs bg-amber-500 text-white px-2 py-1 rounded opacity-0 group-hover:opacity-100 hover:bg-amber-600 transition-all"
+          className="text-xs bg-amber-500 text-white px-2 py-1 rounded md:opacity-0 md:group-hover:opacity-100 hover:bg-amber-600 transition-all"
         >
           Find Owner
         </button>

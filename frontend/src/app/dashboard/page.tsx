@@ -5,7 +5,7 @@ import { useRequireAuth } from "@/lib/auth";
 import dynamic from "next/dynamic";
 import Navbar from "@/components/Navbar";
 import Sidebar from "@/components/Sidebar";
-import type { OverlayConfig } from "@/components/Sidebar";
+import type { OverlayConfig, MapTheme } from "@/components/Sidebar";
 import SettingsPanel from "@/components/SettingsPanel";
 import WaterBodyDetailModal from "@/components/WaterBodyDetailModal";
 import type { WaterBodyResult, BoundingBox } from "@/lib/overpass";
@@ -30,6 +30,9 @@ export default function DashboardPage() {
 
   // Settings panel state
   const [showSettings, setShowSettings] = useState(false);
+
+  // Sidebar visibility (mobile)
+  const [sidebarOpen, setSidebarOpen] = useState(false);
 
   // Google Maps API key (fetched from backend)
   const [mapsApiKey, setMapsApiKey] = useState<string | null>(null);
@@ -59,6 +62,9 @@ export default function DashboardPage() {
     savedRegions: true,
     propertyTypes: false,
     includeSmallBodies: false,
+    mapTheme: "hybrid",
+    showLabels: true,
+    showRoads: true,
   });
 
   // Sort field for results
@@ -175,7 +181,7 @@ export default function DashboardPage() {
 
   // Handle overlay toggle from Layers tab
   const handleToggleOverlay = useCallback(
-    (key: keyof OverlayConfig, value: boolean) => {
+    (key: keyof OverlayConfig, value: boolean | string) => {
       setOverlays((prev) => ({ ...prev, [key]: value }));
     },
     []
@@ -231,11 +237,26 @@ export default function DashboardPage() {
 
   return (
     <div className="h-screen flex flex-col">
-      <Navbar onOpenSettings={() => setShowSettings(true)} />
+      <Navbar onOpenSettings={() => setShowSettings(true)} onToggleSidebar={() => setSidebarOpen((v) => !v)} />
 
-      <div className="flex-1 flex overflow-hidden">
-        {/* Sidebar */}
-        <Sidebar
+      <div className="flex-1 flex overflow-hidden relative">
+        {/* Mobile overlay backdrop */}
+        {sidebarOpen && (
+          <div
+            className="fixed inset-0 bg-black/40 z-30 md:hidden"
+            onClick={() => setSidebarOpen(false)}
+          />
+        )}
+
+        {/* Sidebar — slide-over on mobile, fixed on desktop */}
+        <div
+          className={`
+            fixed inset-y-0 left-0 z-40 w-80 transform transition-transform duration-200 ease-in-out
+            md:relative md:translate-x-0 md:z-0
+            ${sidebarOpen ? "translate-x-0" : "-translate-x-full"}
+          `}
+        >
+          <Sidebar
           waterBodies={sortedWaterBodies}
           isLoading={isLoadingWaterBodies}
           onSelectWaterBody={handleSelectFromSidebar}
@@ -253,6 +274,7 @@ export default function DashboardPage() {
           onSortChange={setSortField}
           propertyTypes={propertyTypesMap}
         />
+        </div>
 
         {/* Map */}
         {mapsApiKey === null ? (
@@ -306,6 +328,9 @@ export default function DashboardPage() {
             onPropertyTypesLoaded={setPropertyTypesMap}
             focusLocation={focusLocation}
             waterBodiesForPropertyLookup={waterBodies}
+            mapTheme={overlays.mapTheme}
+            showLabels={overlays.showLabels}
+            showRoads={overlays.showRoads}
           />
         )}
       </div>

@@ -250,8 +250,48 @@ export class SmartyService {
 
   /**
    * Look up property by coordinates (reverse geocode then property lookup).
+   * Tries the exact coordinates first. If that fails, tries nearby offsets
+   * to find the nearest property on shore (water body centers are in the water).
    */
   async lookupPropertyByCoordinates(
+    latitude: number,
+    longitude: number,
+    searchRadiusMeters: number = 200
+  ): Promise<PropertyLookupResult | null> {
+    // Try exact coordinates first
+    const direct = await this._reverseAndLookup(latitude, longitude);
+    if (direct && direct.propertyType !== "unknown") return direct;
+
+    // The exact center is probably in water. Try offsets at N/S/E/W of the center
+    // at increasing distances to find a shore/property address.
+    const offsetDegrees = searchRadiusMeters / 111320; // rough meters → degrees
+    const offsets = [
+      { lat: offsetDegrees, lng: 0 },                 // North
+      { lat: -offsetDegrees, lng: 0 },                // South
+      { lat: 0, lng: offsetDegrees },                  // East
+      { lat: 0, lng: -offsetDegrees },                 // West
+      { lat: offsetDegrees * 0.7, lng: offsetDegrees * 0.7 },   // NE
+      { lat: -offsetDegrees * 0.7, lng: offsetDegrees * 0.7 },  // SE
+      { lat: offsetDegrees * 0.7, lng: -offsetDegrees * 0.7 },  // NW
+      { lat: -offsetDegrees * 0.7, lng: -offsetDegrees * 0.7 }, // SW
+    ];
+
+    for (const offset of offsets) {
+      const result = await this._reverseAndLookup(
+        latitude + offset.lat,
+        longitude + offset.lng
+      );
+      if (result && result.ownerName) return result;
+    }
+
+    // Return whatever we got from the direct lookup (partial data is better than nothing)
+    return direct;
+  }
+
+  /**
+   * Internal: reverse geocode a single point and look up property.
+   */
+  private async _reverseAndLookup(
     latitude: number,
     longitude: number
   ): Promise<PropertyLookupResult | null> {

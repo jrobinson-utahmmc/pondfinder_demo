@@ -7,6 +7,7 @@ import {
   useMap,
   useMapsLibrary,
 } from "@vis.gl/react-google-maps";
+import type { MapTheme } from "@/components/Sidebar";
 import {
   fetchWaterBodiesDebounced,
   isApiRateLimited,
@@ -66,6 +67,12 @@ interface MapViewProps {
   waterBodiesForPropertyLookup?: WaterBodyResult[];
   /** Pan/zoom the map to this location when set */
   focusLocation?: { lat: number; lng: number; zoom?: number } | null;
+  /** Map theme */
+  mapTheme?: MapTheme;
+  /** Show map labels */
+  showLabels?: boolean;
+  /** Show roads on map */
+  showRoads?: boolean;
 }
 
 // ---------------------------------------------------------------------------
@@ -302,43 +309,48 @@ function PropertyTypeOverlayLayer({
     if (infoWindowRef.current) infoWindowRef.current.close();
     infoWindowRef.current = new google.maps.InfoWindow();
 
+    // Classification colors
+    const classColors: Record<string, { color: string; label: string; title: string }> = {
+      commercial: { color: "#ef4444", label: "B", title: "Business / Commercial" },
+      business: { color: "#ef4444", label: "B", title: "Business / Commercial" },
+      industrial: { color: "#ef4444", label: "B", title: "Industrial" },
+      residential: { color: "#22c55e", label: "R", title: "Residential / Private" },
+      agricultural: { color: "#f59e0b", label: "A", title: "Agricultural / Farm" },
+      vacant: { color: "#8b5cf6", label: "V", title: "Vacant Land" },
+      mixed: { color: "#3b82f6", label: "M", title: "Mixed Use" },
+    };
+
     for (const wb of waterBodies) {
       const propType = propertyTypesMap.get(wb.id);
       if (!propType || propType === "unknown") continue;
 
-      const isBusinessCommercial =
-        propType === "commercial" || propType === "business" || propType === "industrial";
-      const color = isBusinessCommercial ? "#ef4444" : "#22c55e"; // red vs green
-      const label = isBusinessCommercial ? "B" : "R";
-      const title = isBusinessCommercial
-        ? `Business/Commercial Property`
-        : `Residential/Private Property`;
+      const cls = classColors[propType] || { color: "#6b7280", label: "?", title: propType.charAt(0).toUpperCase() + propType.slice(1) };
 
       const marker = new google.maps.Marker({
         position: { lat: wb.center.lat, lng: wb.center.lng },
         map,
         icon: {
           path: google.maps.SymbolPath.CIRCLE,
-          fillColor: color,
+          fillColor: cls.color,
           fillOpacity: 0.9,
           strokeColor: "#fff",
           strokeWeight: 2,
           scale: 10,
         },
         label: {
-          text: label,
+          text: cls.label,
           color: "#fff",
           fontSize: "10px",
           fontWeight: "bold",
         },
-        title,
+        title: cls.title,
         zIndex: 10,
       });
 
       marker.addListener("click", () => {
         infoWindowRef.current?.setContent(
           `<div style="font-family: sans-serif; font-size: 13px; max-width: 220px;">
-            <div style="font-weight: 600; margin-bottom: 4px; color: ${color};">${title}</div>
+            <div style="font-weight: 600; margin-bottom: 4px; color: ${cls.color};">${cls.title}</div>
             <div style="color: #666;">${wb.name || wb.type}</div>
             <div style="font-size: 11px; color: #999; margin-top: 4px;">
               Classification: ${propType.charAt(0).toUpperCase() + propType.slice(1)}
@@ -385,6 +397,9 @@ function classifyPropertyType(owner: any): string {
     propType.includes("family")
   ) {
     return "residential";
+  }
+  if (propType.includes("mixed")) {
+    return "mixed";
   }
   if (propType.includes("agricultural") || propType.includes("farm") || propType.includes("ranch")) {
     return "agricultural";
@@ -737,23 +752,97 @@ function MapFocuser({
 }
 
 // ---------------------------------------------------------------------------
-// Map Initializer - applies styles and map type
+// Map Initializer - applies styles, theme, and map type
 // ---------------------------------------------------------------------------
 
-function MapInitializer() {
+/** Dark mode map style */
+const DARK_STYLES: google.maps.MapTypeStyle[] = [
+  { elementType: "geometry", stylers: [{ color: "#212121" }] },
+  { elementType: "labels.icon", stylers: [{ visibility: "off" }] },
+  { elementType: "labels.text.fill", stylers: [{ color: "#757575" }] },
+  { elementType: "labels.text.stroke", stylers: [{ color: "#212121" }] },
+  { featureType: "administrative", elementType: "geometry", stylers: [{ color: "#757575" }] },
+  { featureType: "poi", stylers: [{ visibility: "off" }] },
+  { featureType: "road", elementType: "geometry.fill", stylers: [{ color: "#2c2c2c" }] },
+  { featureType: "road", elementType: "labels.text.fill", stylers: [{ color: "#8a8a8a" }] },
+  { featureType: "road.highway", elementType: "geometry", stylers: [{ color: "#3c3c3c" }] },
+  { featureType: "transit", stylers: [{ visibility: "off" }] },
+  { featureType: "water", elementType: "geometry", stylers: [{ color: "#000000" }] },
+  { featureType: "water", elementType: "labels.text.fill", stylers: [{ color: "#3d3d3d" }] },
+];
+
+/** Minimal clean map style */
+const MINIMAL_STYLES: google.maps.MapTypeStyle[] = [
+  { featureType: "poi", stylers: [{ visibility: "off" }] },
+  { featureType: "transit", stylers: [{ visibility: "off" }] },
+  { featureType: "road", elementType: "labels", stylers: [{ visibility: "simplified" }] },
+  { elementType: "labels.icon", stylers: [{ visibility: "off" }] },
+  { featureType: "administrative.land_parcel", stylers: [{ visibility: "off" }] },
+];
+
+function buildMapStyles(
+  theme: MapTheme,
+  showLabels: boolean,
+  showRoads: boolean
+): google.maps.MapTypeStyle[] {
+  const styles: google.maps.MapTypeStyle[] = [];
+
+  if (theme === "dark") {
+    styles.push(...DARK_STYLES);
+  } else if (theme === "minimal") {
+    styles.push(...MINIMAL_STYLES);
+  } else {
+    // Base styles for all other themes — hide POIs/transit
+    styles.push(...MAP_STYLES);
+  }
+
+  if (!showLabels) {
+    styles.push({ elementType: "labels", stylers: [{ visibility: "off" }] });
+  }
+
+  if (!showRoads) {
+    styles.push({ featureType: "road", stylers: [{ visibility: "off" }] });
+  }
+
+  return styles;
+}
+
+function getMapTypeId(theme: MapTheme): string {
+  switch (theme) {
+    case "hybrid":
+      return "hybrid";
+    case "satellite":
+      return "satellite";
+    case "roadmap":
+    case "dark":
+    case "minimal":
+      return "roadmap";
+    case "terrain":
+      return "terrain";
+    default:
+      return "hybrid";
+  }
+}
+
+function MapInitializer({
+  theme = "hybrid",
+  showLabels = true,
+  showRoads = true,
+}: {
+  theme?: MapTheme;
+  showLabels?: boolean;
+  showRoads?: boolean;
+}) {
   const map = useMap();
 
   useEffect(() => {
     if (!map) return;
 
-    // Set to satellite/hybrid view
-    map.setMapTypeId(google.maps.MapTypeId.HYBRID);
-
-    // Apply custom styles to hide POIs
+    map.setMapTypeId(getMapTypeId(theme));
     map.setOptions({
-      styles: MAP_STYLES,
+      styles: buildMapStyles(theme, showLabels, showRoads),
     });
-  }, [map]);
+  }, [map, theme, showLabels, showRoads]);
 
   return null;
 }
@@ -786,6 +875,9 @@ export default function MapView({
   onPropertyTypesLoaded,
   waterBodiesForPropertyLookup = [],
   focusLocation = null,
+  mapTheme = "hybrid",
+  showLabels = true,
+  showRoads = true,
 }: MapViewProps) {
   const [mapReady, setMapReady] = useState(false);
   const [waterBodies, setWaterBodies] = useState<WaterBodyResult[]>([]);
@@ -917,7 +1009,7 @@ export default function MapView({
         >
           {mapReady && (
             <>
-              <MapInitializer />
+              <MapInitializer theme={mapTheme} showLabels={showLabels} showRoads={showRoads} />
               <MapFocuser location={focusLocation} />
               <RegionDrawingLayer
                 enabled={regionDrawingEnabled}
@@ -1037,7 +1129,7 @@ export default function MapView({
 
       {/* Census income legend */}
       {showCensusOverlay && censusTracts.length > 0 && !censusLoading && (
-        <div className="absolute bottom-4 right-4 bg-white/95 rounded-lg shadow-lg p-3 text-xs z-10">
+        <div className="absolute bottom-4 right-2 md:right-4 bg-white/95 rounded-lg shadow-lg p-2.5 md:p-3 text-xs z-10 max-w-[180px]">
           <div className="font-semibold text-gray-700 mb-2">Median Household Income</div>
           <div className="flex flex-col gap-1">
             <div className="flex items-center gap-2">
@@ -1070,28 +1162,51 @@ export default function MapView({
       )}
 
       {/* Property type legend */}
-      {showPropertyTypes && propertyTypesMap.size > 0 && (
-        <div
-          className={`absolute ${
-            showCensusOverlay && censusTracts.length > 0 ? "bottom-48" : "bottom-4"
-          } right-4 bg-white/95 rounded-lg shadow-lg p-3 text-xs z-10`}
-        >
-          <div className="font-semibold text-gray-700 mb-2">Property Classification</div>
-          <div className="flex flex-col gap-1">
-            <div className="flex items-center gap-2">
-              <div className="w-5 h-3 rounded-full" style={{ backgroundColor: "#ef4444" }} />
-              <span className="text-gray-600">Business / Commercial</span>
+      {showPropertyTypes && propertyTypesMap.size > 0 && (() => {
+        // Compute category counts
+        const counts: Record<string, number> = {};
+        propertyTypesMap.forEach((type) => {
+          if (type !== "unknown") {
+            const cat = type === "business" || type === "industrial" ? "commercial" : type;
+            counts[cat] = (counts[cat] || 0) + 1;
+          }
+        });
+        const legendItems = [
+          { color: "#ef4444", label: "B", name: "Business / Commercial", key: "commercial" },
+          { color: "#22c55e", label: "R", name: "Residential / Private", key: "residential" },
+          { color: "#3b82f6", label: "M", name: "Mixed Use", key: "mixed" },
+          { color: "#f59e0b", label: "A", name: "Agricultural / Farm", key: "agricultural" },
+          { color: "#8b5cf6", label: "V", name: "Vacant Land", key: "vacant" },
+        ].filter((item) => counts[item.key]);
+        const total = Object.values(counts).reduce((a, b) => a + b, 0);
+
+        return (
+          <div
+            className={`absolute ${
+              showCensusOverlay && censusTracts.length > 0 ? "bottom-52 md:bottom-48" : "bottom-4"
+            } right-2 md:right-4 bg-white/95 rounded-lg shadow-lg p-2.5 md:p-3 text-xs z-10 max-w-[180px]`}
+          >
+            <div className="font-semibold text-gray-700 mb-2">Property Classification</div>
+            <div className="flex flex-col gap-1">
+              {legendItems.map((item) => (
+                <div key={item.key} className="flex items-center gap-2">
+                  <div
+                    className="w-5 h-5 rounded-full flex items-center justify-center text-white text-[9px] font-bold shrink-0"
+                    style={{ backgroundColor: item.color }}
+                  >
+                    {item.label}
+                  </div>
+                  <span className="text-gray-600 leading-tight">
+                    {item.name}{" "}
+                    <span className="text-gray-400">({counts[item.key]})</span>
+                  </span>
+                </div>
+              ))}
             </div>
-            <div className="flex items-center gap-2">
-              <div className="w-5 h-3 rounded-full" style={{ backgroundColor: "#22c55e" }} />
-              <span className="text-gray-600">Residential / Private</span>
-            </div>
+            <div className="text-gray-400 mt-2">{total} properties classified</div>
           </div>
-          <div className="text-gray-400 mt-2">
-            {propertyTypesMap.size} properties classified
-          </div>
-        </div>
-      )}
+        );
+      })()}
     </div>
   );
 }
