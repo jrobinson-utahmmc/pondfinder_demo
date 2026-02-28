@@ -135,7 +135,7 @@ ok "Frontend dependencies installed"
 info "Building backend..."
 # Need devDependencies (typescript) for build, reinstall with them
 run_as_owner npm --prefix "$PROJECT_DIR" install
-run_as_owner npx --yes tsc --project "$PROJECT_DIR/tsconfig.json"
+run_as_owner "$PROJECT_DIR/node_modules/.bin/tsc" --project "$PROJECT_DIR/tsconfig.json"
 ok "Backend built → dist/"
 
 # ---------------------------------------------------------------------------
