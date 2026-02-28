@@ -1109,9 +1109,7 @@ export default function MapView({
                 </>
               )}
               {/* Census income overlay (rendered below water bodies) */}
-              {s  propertyEnrichmentMap={propertyEnrichmentMap}
-                  onPropertyEnrichmentLoaded={onPropertyEnrichmentLoaded}
-                howCensusOverlay && censusTracts.length > 0 && (
+              {showCensusOverlay && censusTracts.length > 0 && (
                 <CensusOverlayLayer tracts={censusTracts} />
               )}
               {/* Property type overlay (business vs residential markers) */}
