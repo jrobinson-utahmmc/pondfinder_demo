@@ -122,34 +122,27 @@ run_as_owner() {
 # 3. Install npm dependencies
 # ---------------------------------------------------------------------------
 info "Installing backend dependencies..."
-cd "$PROJECT_DIR"
-run_as_owner npm ci --omit=dev 2>/dev/null || run_as_owner npm install --omit=dev
+run_as_owner npm --prefix "$PROJECT_DIR" ci --omit=dev 2>/dev/null || run_as_owner npm --prefix "$PROJECT_DIR" install --omit=dev
 ok "Backend dependencies installed"
 
 info "Installing frontend dependencies..."
-cd "$FRONTEND_DIR"
-run_as_owner npm ci 2>/dev/null || run_as_owner npm install
+run_as_owner npm --prefix "$FRONTEND_DIR" ci 2>/dev/null || run_as_owner npm --prefix "$FRONTEND_DIR" install
 ok "Frontend dependencies installed"
 
 # ---------------------------------------------------------------------------
 # 4. Build backend (TypeScript → dist/)
 # ---------------------------------------------------------------------------
 info "Building backend..."
-cd "$PROJECT_DIR"
 # Need devDependencies (typescript) for build, reinstall with them
-run_as_owner npm install
-run_as_owner npx --yes tsc
+run_as_owner npm --prefix "$PROJECT_DIR" install
+run_as_owner npx --yes tsc --project "$PROJECT_DIR/tsconfig.json"
 ok "Backend built → dist/"
 
 # ---------------------------------------------------------------------------
 # 5. Build frontend (Next.js)
 # ---------------------------------------------------------------------------
 info "Building frontend..."
-(
-  cd "$FRONTEND_DIR"
-  ls package.json > /dev/null  # verify we're in the right directory
-  run_as_owner npx --yes next build
-)
+run_as_owner bash -c "cd '$FRONTEND_DIR' && ./node_modules/.bin/next build"
 ok "Frontend built"
 
 # ---------------------------------------------------------------------------
@@ -250,7 +243,7 @@ Type=simple
 User=${REPO_OWNER}
 Group=${REPO_GROUP}
 WorkingDirectory=${FRONTEND_DIR}
-ExecStart=/bin/sh ${FRONTEND_DIR}/node_modules/.bin/next start -p 3000
+ExecStart=/bin/bash -c "cd ${FRONTEND_DIR} && exec ./node_modules/.bin/next start -p 3000"
 Restart=on-failure
 RestartSec=5
 StandardOutput=journal
