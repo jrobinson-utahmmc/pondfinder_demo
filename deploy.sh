@@ -145,7 +145,8 @@ ok "Backend built → dist/"
 # 5. Build frontend (Next.js)
 # ---------------------------------------------------------------------------
 info "Building frontend..."
-run_as_owner npm --prefix "$FRONTEND_DIR" run build
+cd "$FRONTEND_DIR"
+run_as_owner npm run build
 ok "Frontend built"
 
 # ---------------------------------------------------------------------------
