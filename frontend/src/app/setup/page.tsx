@@ -1,19 +1,37 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
-import { apiInitSetup } from "@/lib/api";
+import { apiInitSetup, apiGetSetupStatus } from "@/lib/api";
 
 export default function SetupPage() {
   const router = useRouter();
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
+  const [checking, setChecking] = useState(true);
 
   // Admin account fields
   const [username, setUsername] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
+
+  // Redirect away if setup is already completed
+  useEffect(() => {
+    async function check() {
+      try {
+        const res = await apiGetSetupStatus();
+        if (!res.data?.needsSetup) {
+          router.replace("/login");
+          return;
+        }
+      } catch {
+        // Backend down — let them stay on setup page
+      }
+      setChecking(false);
+    }
+    check();
+  }, [router]);
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -45,6 +63,14 @@ export default function SetupPage() {
     } finally {
       setLoading(false);
     }
+  }
+
+  if (checking) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-gray-900 via-blue-900 to-cyan-900">
+        <div className="text-white text-sm">Loading...</div>
+      </div>
+    );
   }
 
   return (

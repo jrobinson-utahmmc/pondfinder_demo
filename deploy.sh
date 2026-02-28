@@ -8,7 +8,8 @@
 #
 # Usage:
 #   chmod +x deploy.sh
-#   sudo ./deploy.sh
+#   sudo ./deploy.sh            # Normal deploy / redeploy
+#   sudo ./deploy.sh --clean    # Wipe database + .env, full fresh start
 #
 # What this script does:
 #   1. Installs Node.js 22 LTS (via NodeSource)
@@ -45,6 +46,59 @@ err()   { echo -e "${RED}[ERROR]${NC} $*"; }
 if [[ $EUID -ne 0 ]]; then
   err "This script must be run as root (sudo ./deploy.sh)"
   exit 1
+fi
+
+# ---------------------------------------------------------------------------
+# Handle --clean flag: wipe database, .env, and build artifacts for fresh start
+# ---------------------------------------------------------------------------
+if [[ "${1:-}" == "--clean" ]]; then
+  warn "=============================================="
+  warn "  CLEAN DEPLOY — This will PERMANENTLY delete:"
+  warn "    • MongoDB 'pond-finder' database"
+  warn "    • Production .env file"
+  warn "    • Backend dist/ build output"
+  warn "    • Frontend .next/ build output"
+  warn "=============================================="
+  echo ""
+  read -rp "Are you sure? Type YES to continue: " CONFIRM
+  if [[ "$CONFIRM" != "YES" ]]; then
+    info "Aborted."
+    exit 0
+  fi
+
+  SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+
+  # Stop services if running
+  info "Stopping services..."
+  systemctl stop pond-finder-frontend 2>/dev/null || true
+  systemctl stop pond-finder-backend 2>/dev/null || true
+
+  # Drop the MongoDB database
+  if command -v mongosh &>/dev/null; then
+    info "Dropping pond-finder database (mongosh)..."
+    mongosh --quiet --eval 'db.getSiblingDB("pond-finder").dropDatabase()' 2>/dev/null && ok "Database dropped" || warn "Could not drop database — is MongoDB running?"
+  elif command -v mongo &>/dev/null; then
+    info "Dropping pond-finder database (mongo)..."
+    mongo --quiet --eval 'db.getSiblingDB("pond-finder").dropDatabase()' 2>/dev/null && ok "Database dropped" || warn "Could not drop database — is MongoDB running?"
+  else
+    warn "Neither mongosh nor mongo CLI found — drop the database manually"
+  fi
+
+  # Remove .env
+  if [[ -f "$SCRIPT_DIR/.env" ]]; then
+    rm -f "$SCRIPT_DIR/.env"
+    ok "Removed .env"
+  fi
+
+  # Remove build artifacts
+  rm -rf "$SCRIPT_DIR/dist"
+  ok "Removed dist/"
+  rm -rf "$SCRIPT_DIR/frontend/.next"
+  ok "Removed frontend/.next/"
+
+  echo ""
+  ok "Clean complete. Run 'sudo ./deploy.sh' to redeploy fresh."
+  exit 0
 fi
 
 # ---------------------------------------------------------------------------
