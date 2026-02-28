@@ -1,0 +1,51 @@
+@import "tailwindcss";
+
+:root {
+  --background: #f5f7fa;
+  --foreground: #202124;
+  --primary: #1a73e8;
+  --primary-dark: #1557b0;
+  --secondary: #34a853;
+  --danger: #ea4335;
+  --warning: #fbbc04;
+  --border: #dadce0;
+  --text-light: #5f6368;
+  --surface: #ffffff;
+}
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-primary: var(--primary);
+  --color-primary-dark: var(--primary-dark);
+  --color-secondary: var(--secondary);
+  --color-danger: var(--danger);
+  --color-warning: var(--warning);
+  --color-border: var(--border);
+  --color-text-light: var(--text-light);
+  --color-surface: var(--surface);
+  --font-sans: var(--font-geist-sans);
+  --font-mono: var(--font-geist-mono);
+}
+
+body {
+  background: var(--background);
+  color: var(--foreground);
+  font-family: var(--font-sans), Arial, Helvetica, sans-serif;
+}
+
+/* Slide-in animation for toasts */
+@keyframes slide-in {
+  from {
+    transform: translateX(100%);
+    opacity: 0;
+  }
+  to {
+    transform: translateX(0);
+    opacity: 1;
+  }
+}
+
+.animate-slide-in {
+  animation: slide-in 0.3s ease;
+}
