@@ -145,8 +145,11 @@ ok "Backend built → dist/"
 # 5. Build frontend (Next.js)
 # ---------------------------------------------------------------------------
 info "Building frontend..."
-cd "$FRONTEND_DIR"
-run_as_owner npm run build
+(
+  cd "$FRONTEND_DIR"
+  ls package.json > /dev/null  # verify we're in the right directory
+  run_as_owner npx --yes next build
+)
 ok "Frontend built"
 
 # ---------------------------------------------------------------------------
@@ -247,7 +250,7 @@ Type=simple
 User=${REPO_OWNER}
 Group=${REPO_GROUP}
 WorkingDirectory=${FRONTEND_DIR}
-ExecStart=$(command -v node) ${FRONTEND_DIR}/node_modules/next/dist/bin/next start -p 3000
+ExecStart=/bin/sh ${FRONTEND_DIR}/node_modules/.bin/next start -p 3000
 Restart=on-failure
 RestartSec=5
 StandardOutput=journal
@@ -257,12 +260,10 @@ SyslogIdentifier=pond-finder-frontend
 # Environment
 EnvironmentFile=${ENV_FILE}
 Environment=NODE_ENV=production
+Environment=PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
 
 # Security hardening
 NoNewPrivileges=true
-ProtectSystem=strict
-ProtectHome=read-only
-ReadWritePaths=${FRONTEND_DIR}
 PrivateTmp=true
 
 [Install]
