@@ -13,7 +13,9 @@ import type { User } from "@/types";
 import {
   apiLogin,
   apiLogout,
+  apiGetProfile,
   getStoredUser,
+  setStoredUser,
   clearToken,
 } from "@/lib/api";
 
@@ -31,13 +33,29 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [isLoading, setIsLoading] = useState(true);
   const router = useRouter();
 
-  // Hydrate user from localStorage on mount
+  // Hydrate user from localStorage, then validate token with backend
   useEffect(() => {
-    const stored = getStoredUser();
-    if (stored) {
-      setUser(stored);
+    async function hydrate() {
+      const stored = getStoredUser();
+      if (stored) {
+        // Optimistically set user so UI doesn't flash
+        setUser(stored);
+        try {
+          // Validate token is still valid
+          const res = await apiGetProfile();
+          if (res.data) {
+            const validated = res.data as unknown as User;
+            setUser(validated);
+            setStoredUser(validated);
+          }
+        } catch {
+          // Token expired / invalid — already cleared by request() handler
+          setUser(null);
+        }
+      }
+      setIsLoading(false);
     }
-    setIsLoading(false);
+    hydrate();
   }, []);
 
   const login = useCallback(
@@ -57,17 +75,25 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     router.push("/login");
   }, [router]);
 
-  // Listen for 401 events from other tabs
+  // Listen for auth expiry from request() 401 handler
+  useEffect(() => {
+    const onExpired = () => {
+      setUser(null);
+    };
+    window.addEventListener("pond_finder:auth_expired", onExpired);
+    return () => window.removeEventListener("pond_finder:auth_expired", onExpired);
+  }, []);
+
+  // Listen for logout in other tabs
   useEffect(() => {
     const handler = (e: StorageEvent) => {
       if (e.key === "pond_finder_token" && !e.newValue) {
         setUser(null);
-        router.push("/login");
       }
     };
     window.addEventListener("storage", handler);
     return () => window.removeEventListener("storage", handler);
-  }, [router]);
+  }, []);
 
   return (
     <AuthContext.Provider value={{ user, isLoading, login, logout }}>

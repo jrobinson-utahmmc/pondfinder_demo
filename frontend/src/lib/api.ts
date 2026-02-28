@@ -68,13 +68,26 @@ async function request<T>(
 
   const res = await fetch(url, { ...options, headers });
 
-  // 401 → session expired
+  // 401 → read actual error message from backend, clear auth state
   if (res.status === 401) {
-    clearToken();
-    if (typeof window !== "undefined" && !window.location.pathname.includes("/login")) {
-      window.location.href = "/login";
+    let message = "Authentication failed";
+    try {
+      const body = await res.json();
+      message = body.message || message;
+    } catch {
+      // response wasn't JSON
     }
-    throw new Error("Session expired. Please log in again.");
+
+    // Only clear token + signal expiry if user HAD a token (real session expiry).
+    // If no token existed this is just a failed login attempt — don't touch auth state.
+    if (token) {
+      clearToken();
+      if (typeof window !== "undefined") {
+        window.dispatchEvent(new Event("pond_finder:auth_expired"));
+      }
+    }
+
+    throw new Error(message);
   }
 
   const data: ApiResponse<T> = await res.json();
