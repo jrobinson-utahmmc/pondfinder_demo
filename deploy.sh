@@ -139,14 +139,7 @@ run_as_owner "$PROJECT_DIR/node_modules/.bin/tsc" --project "$PROJECT_DIR/tsconf
 ok "Backend built → dist/"
 
 # ---------------------------------------------------------------------------
-# 5. Build frontend (Next.js)
-# ---------------------------------------------------------------------------
-info "Building frontend..."
-run_as_owner bash -c "cd '$FRONTEND_DIR' && ./node_modules/.bin/next build"
-ok "Frontend built"
-
-# ---------------------------------------------------------------------------
-# 6. Generate production .env
+# 5. Generate production .env (MUST be before frontend build — NEXT_PUBLIC_* is inlined at build time)
 # ---------------------------------------------------------------------------
 ENV_FILE="$PROJECT_DIR/.env"
 
@@ -193,6 +186,13 @@ ENVEOF
   chmod 600 "$ENV_FILE"
   ok ".env created (JWT_SECRET auto-generated)"
 fi
+
+# ---------------------------------------------------------------------------
+# 6. Build frontend (Next.js)
+# ---------------------------------------------------------------------------
+info "Building frontend..."
+run_as_owner bash -c "cd '$FRONTEND_DIR' && ./node_modules/.bin/next build"
+ok "Frontend built"
 
 # ---------------------------------------------------------------------------
 # 7. Create systemd services

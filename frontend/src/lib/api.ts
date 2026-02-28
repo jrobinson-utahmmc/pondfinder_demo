@@ -17,7 +17,7 @@ import type {
   CoordinateLookupPayload,
 } from "@/types";
 
-const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:3001";
+const API_URL = process.env.NEXT_PUBLIC_API_URL || "";  // Empty = same origin (proxied via Next.js rewrites)
 
 // ---------------------------------------------------------------------------
 // Helpers
