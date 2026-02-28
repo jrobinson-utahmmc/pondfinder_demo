@@ -145,8 +145,7 @@ ok "Backend built → dist/"
 # 5. Build frontend (Next.js)
 # ---------------------------------------------------------------------------
 info "Building frontend..."
-cd "$FRONTEND_DIR"
-run_as_owner npm run build
+run_as_owner npm --prefix "$FRONTEND_DIR" run build
 ok "Frontend built"
 
 # ---------------------------------------------------------------------------
@@ -247,7 +246,7 @@ Type=simple
 User=${REPO_OWNER}
 Group=${REPO_GROUP}
 WorkingDirectory=${FRONTEND_DIR}
-ExecStart=$(command -v npm) run start -- -p 3000
+ExecStart=$(command -v node) ${FRONTEND_DIR}/node_modules/.bin/next start -p 3000
 Restart=on-failure
 RestartSec=5
 StandardOutput=journal
