@@ -49,3 +49,26 @@ body {
 .animate-slide-in {
   animation: slide-in 0.3s ease;
 }
+
+/* Google Maps address label styling */
+.map-address-label {
+  background: rgba(255, 255, 255, 0.85);
+  padding: 1px 4px;
+  border-radius: 3px;
+  margin-top: 14px !important;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.2);
+  white-space: nowrap;
+}
+
+/* Hide Google Maps default branding elements that are allowed to hide */
+.gm-style .gmnoprint:not([class*="gm-bundled-control"]) {
+  display: none !important;
+}
+
+/* Smaller zoom controls on mobile */
+@media (max-width: 768px) {
+  .gm-bundled-control {
+    transform: scale(0.8);
+    transform-origin: bottom right;
+  }
+}

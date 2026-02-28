@@ -9,7 +9,7 @@ import type { OverlayConfig, MapTheme } from "@/components/Sidebar";
 import SettingsPanel from "@/components/SettingsPanel";
 import WaterBodyDetailModal from "@/components/WaterBodyDetailModal";
 import type { WaterBodyResult, BoundingBox } from "@/lib/overpass";
-import type { DrawnRegion } from "@/components/MapView";
+import type { DrawnRegion, PropertyLookupEnrichment } from "@/components/MapView";
 import type { SavedRegion } from "@/lib/savedRegions";
 import { getSavedRegions, updateRegion } from "@/lib/savedRegions";
 import { apiGetMapsKey, apiLookupPropertyByCoords } from "@/lib/api";
@@ -78,6 +78,13 @@ export default function DashboardPage() {
   // Property types map (water body id → property classification)
   const [propertyTypesMap, setPropertyTypesMap] = useState<Map<string, string>>(new Map());
 
+  // Property enrichment map (water body id → full property data with addresses)
+  const [propertyEnrichmentMap, setPropertyEnrichmentMap] = useState<Map<string, PropertyLookupEnrichment>>(new Map());
+
+  // Address search state
+  const [addressSearch, setAddressSearch] = useState("");
+  const [addressSearching, setAddressSearching] = useState(false);
+
   // Get saved regions for map overlay
   const [savedRegions, setSavedRegions] = useState<SavedRegion[]>([]);
 
@@ -124,6 +131,7 @@ export default function DashboardPage() {
 
   const handleSelectFromSidebar = useCallback((waterBody: WaterBodyResult) => {
     setSelectedWaterBody(waterBody);
+    setSidebarOpen(false); // auto-close on mobile
     // Zoom into the water body — pick zoom level based on area
     const area = waterBody.area || 0;
     let zoom = 18;
@@ -158,6 +166,7 @@ export default function DashboardPage() {
   // Handle saved region selection
   const handleSelectSavedRegion = useCallback((region: SavedRegion) => {
     setSelectedRegionId(region.id);
+    setSidebarOpen(false); // auto-close on mobile
     setCurrentRegion({
       bounds: region.bounds,
       center: region.center,
@@ -167,6 +176,73 @@ export default function DashboardPage() {
     setIsScanning(true);
     setIsLoadingWaterBodies(true);
   }, []);
+
+  // Handle map right-click address lookup
+  const handleMapAddressLookup = useCallback(async (lat: number, lng: number) => {
+    try {
+      const res = await apiLookupPropertyByCoords({ latitude: lat, longitude: lng });
+      if (res.data) {
+        setPropertyOwner(res.data);
+        setOwnerError(null);
+        // Create a synthetic water body selection to show the modal
+        setSelectedWaterBody({
+          id: `lookup-${lat.toFixed(6)}-${lng.toFixed(6)}`,
+          name: res.data.propertyAddress?.street || "Map Lookup",
+          type: "water",
+          center: { lat, lng },
+          coordinates: [],
+          area: 0,
+          tags: {},
+        } as WaterBodyResult);
+      } else {
+        setSelectedWaterBody({
+          id: `lookup-${lat.toFixed(6)}-${lng.toFixed(6)}`,
+          name: "Map Lookup",
+          type: "water",
+          center: { lat, lng },
+          coordinates: [],
+          area: 0,
+          tags: {},
+        } as WaterBodyResult);
+        setOwnerError("No property information found at this location.");
+        setPropertyOwner(null);
+      }
+    } catch (err: any) {
+      setSelectedWaterBody({
+        id: `lookup-${lat.toFixed(6)}-${lng.toFixed(6)}`,
+        name: "Map Lookup",
+        type: "water",
+        center: { lat, lng },
+        coordinates: [],
+        area: 0,
+        tags: {},
+      } as WaterBodyResult);
+      setOwnerError(err.message || "Address lookup failed.");
+      setPropertyOwner(null);
+    }
+  }, []);
+
+  // Handle address search (geocode text to location)
+  const handleAddressSearch = useCallback(async () => {
+    if (!addressSearch.trim() || !mapsApiKey) return;
+    setAddressSearching(true);
+    try {
+      const resp = await fetch(
+        `https://maps.googleapis.com/maps/api/geocode/json?address=${encodeURIComponent(addressSearch.trim())}&key=${mapsApiKey}`
+      );
+      const data = await resp.json();
+      if (data.results?.length > 0) {
+        const loc = data.results[0].geometry.location;
+        setFocusLocation({ lat: loc.lat, lng: loc.lng, zoom: 17 });
+        // Auto-lookup property at this address
+        handleMapAddressLookup(loc.lat, loc.lng);
+      }
+    } catch {
+      // silently fail
+    } finally {
+      setAddressSearching(false);
+    }
+  }, [addressSearch, mapsApiKey, handleMapAddressLookup]);
 
   // Handle clicking saved region on map
   const handleSavedRegionClick = useCallback(
@@ -248,11 +324,11 @@ export default function DashboardPage() {
           />
         )}
 
-        {/* Sidebar — slide-over on mobile, fixed on desktop */}
+        {/* Sidebar — slide-over on mobile, narrower; fixed on desktop */}
         <div
           className={`
-            fixed inset-y-0 left-0 z-40 w-80 transform transition-transform duration-200 ease-in-out
-            md:relative md:translate-x-0 md:z-0
+            fixed inset-y-0 left-0 z-40 w-[280px] sm:w-72 transform transition-transform duration-200 ease-in-out
+            md:relative md:w-80 md:translate-x-0 md:z-0
             ${sidebarOpen ? "translate-x-0" : "-translate-x-full"}
           `}
         >
@@ -331,7 +407,39 @@ export default function DashboardPage() {
             mapTheme={overlays.mapTheme}
             showLabels={overlays.showLabels}
             showRoads={overlays.showRoads}
+            propertyEnrichmentMap={propertyEnrichmentMap}
+            onPropertyEnrichmentLoaded={setPropertyEnrichmentMap}
+            onMapAddressLookup={handleMapAddressLookup}
           />
+        )}
+
+        {/* Address search bar floating over the map */}
+        {mapsApiKey && (
+          <div className="absolute top-16 md:top-2 left-1/2 -translate-x-1/2 z-10 w-[90%] max-w-sm">
+            <div className="flex bg-white/95 backdrop-blur-sm rounded-full shadow-lg overflow-hidden border border-gray-200">
+              <input
+                type="text"
+                value={addressSearch}
+                onChange={(e) => setAddressSearch(e.target.value)}
+                onKeyDown={(e) => e.key === "Enter" && handleAddressSearch()}
+                placeholder="Search address..."
+                className="flex-1 px-3 py-2 text-sm bg-transparent outline-none text-gray-800 placeholder-gray-400 min-w-0"
+              />
+              <button
+                onClick={handleAddressSearch}
+                disabled={addressSearching || !addressSearch.trim()}
+                className="px-3 text-gray-500 hover:text-blue-600 transition-colors disabled:opacity-40"
+              >
+                {addressSearching ? (
+                  <div className="w-4 h-4 border-2 border-blue-500 border-t-transparent rounded-full animate-spin" />
+                ) : (
+                  <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+                  </svg>
+                )}
+              </button>
+            </div>
+          </div>
         )}
       </div>
 

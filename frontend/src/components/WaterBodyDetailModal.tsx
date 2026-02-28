@@ -67,11 +67,16 @@ export default function WaterBodyDetailModal({
       onClick={onClose}
     >
       <div
-        className="bg-white rounded-t-xl md:rounded-xl shadow-2xl w-full max-w-md md:mx-4 max-h-[90vh] overflow-y-auto"
+        className="bg-white rounded-t-2xl md:rounded-xl shadow-2xl w-full max-w-md md:mx-4 max-h-[80vh] md:max-h-[90vh] overflow-hidden flex flex-col"
         onClick={(e) => e.stopPropagation()}
       >
+        {/* Mobile drag handle */}
+        <div className="md:hidden flex justify-center pt-2 pb-1">
+          <div className="w-10 h-1 bg-gray-300 rounded-full" />
+        </div>
+
         {/* Header */}
-        <div className="bg-gradient-to-r from-blue-500 to-cyan-500 p-6 text-white">
+        <div className="bg-gradient-to-r from-blue-500 to-cyan-500 px-4 py-4 md:p-6 text-white shrink-0">
           <div className="flex items-start justify-between">
             <div>
               <span
@@ -98,7 +103,7 @@ export default function WaterBodyDetailModal({
         </div>
 
         {/* Content */}
-        <div className="p-6 space-y-4">
+        <div className="p-4 md:p-6 space-y-3 overflow-y-auto flex-1">
           {/* Area */}
           {area && (
             <div className="bg-gray-50 rounded-lg p-4">
@@ -257,7 +262,7 @@ export default function WaterBodyDetailModal({
         </div>
 
         {/* Footer actions */}
-        <div className="border-t border-gray-200 p-4 flex gap-3">
+        <div className="border-t border-gray-200 p-3 md:p-4 flex gap-2 shrink-0">
           <button
             onClick={onClose}
             className="flex-1 px-4 py-2.5 border border-gray-300 rounded-lg text-sm font-medium text-gray-700 hover:bg-gray-50 transition-colors"

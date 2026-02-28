@@ -26,6 +26,16 @@ export interface DrawnRegion {
   area: number;
 }
 
+/** Enrichment data from property lookups — stored per water body */
+export interface PropertyLookupEnrichment {
+  ownerName: string;
+  companyName: string;
+  propertyAddress: { street: string; city: string; state: string; zipCode: string };
+  propertyType: string;
+  latitude: number;
+  longitude: number;
+}
+
 interface MapViewProps {
   /** Google Maps API key (fetched from backend) */
   apiKey?: string;
@@ -73,6 +83,12 @@ interface MapViewProps {
   showLabels?: boolean;
   /** Show roads on map */
   showRoads?: boolean;
+  /** Enrichment data map (water body id → full property data) */
+  propertyEnrichmentMap?: Map<string, PropertyLookupEnrichment>;
+  /** Called when property enrichment data is loaded */
+  onPropertyEnrichmentLoaded?: (map: Map<string, PropertyLookupEnrichment>) => void;
+  /** Called when user clicks on the map to look up an address */
+  onMapAddressLookup?: (lat: number, lng: number) => void;
 }
 
 // ---------------------------------------------------------------------------
@@ -230,10 +246,14 @@ function PropertyTypeOverlayLayer({
   waterBodies,
   propertyTypesMap,
   onPropertyTypesLoaded,
+  propertyEnrichmentMap,
+  onPropertyEnrichmentLoaded,
 }: {
   waterBodies: WaterBodyResult[];
   propertyTypesMap: Map<string, string>;
   onPropertyTypesLoaded?: (map: Map<string, string>) => void;
+  propertyEnrichmentMap?: Map<string, PropertyLookupEnrichment>;
+  onPropertyEnrichmentLoaded?: (map: Map<string, PropertyLookupEnrichment>) => void;
 }) {
   const map = useMap();
   const markerRefs = useRef<google.maps.Marker[]>([]);
@@ -256,6 +276,7 @@ function PropertyTypeOverlayLayer({
     // Batch lookup — process up to 10 at a time with delays to avoid slamming the API
     const batchSize = 5;
     const newMap = new Map(propertyTypesMap);
+    const enrichMap = new Map(propertyEnrichmentMap || new Map<string, PropertyLookupEnrichment>());
     let changed = false;
 
     async function lookupBatch(batch: WaterBodyResult[]) {
@@ -269,6 +290,18 @@ function PropertyTypeOverlayLayer({
             if (res.data) {
               const propType = classifyPropertyType(res.data);
               newMap.set(wb.id, propType);
+              // Store enrichment info
+              enrichMap.set(wb.id, {
+                ownerName: (res.data as any).companyName || [
+                  (res.data as any).firstName,
+                  (res.data as any).lastName,
+                ].filter(Boolean).join(" ") || "",
+                companyName: (res.data as any).companyName || "",
+                propertyAddress: (res.data as any).propertyAddress || { street: "", city: "", state: "", zipCode: "" },
+                propertyType: (res.data as any).propertyType || "",
+                latitude: (res.data as any).latitude || wb.center.lat,
+                longitude: (res.data as any).longitude || wb.center.lng,
+              });
               changed = true;
             } else {
               newMap.set(wb.id, "unknown");
@@ -293,6 +326,7 @@ function PropertyTypeOverlayLayer({
       }
       if (changed) {
         onPropertyTypesLoaded?.(new Map(newMap));
+        onPropertyEnrichmentLoaded?.(new Map(enrichMap));
       }
     }
 
@@ -326,8 +360,14 @@ function PropertyTypeOverlayLayer({
 
       const cls = classColors[propType] || { color: "#6b7280", label: "?", title: propType.charAt(0).toUpperCase() + propType.slice(1) };
 
+      // Get enrichment data (address) if available
+      const enrichment = propertyEnrichmentMap?.get(wb.id);
+      const addrLine = enrichment?.propertyAddress?.street || "";
+
       const marker = new google.maps.Marker({
-        position: { lat: wb.center.lat, lng: wb.center.lng },
+        position: enrichment
+          ? { lat: enrichment.latitude, lng: enrichment.longitude }
+          : { lat: wb.center.lat, lng: wb.center.lng },
         map,
         icon: {
           path: google.maps.SymbolPath.CIRCLE,
@@ -343,22 +383,54 @@ function PropertyTypeOverlayLayer({
           fontSize: "10px",
           fontWeight: "bold",
         },
-        title: cls.title,
+        title: addrLine || cls.title,
         zIndex: 10,
       });
 
       marker.addListener("click", () => {
+        const ownerName = enrichment?.ownerName || enrichment?.companyName || "";
+        const addrFull = enrichment?.propertyAddress
+          ? `${enrichment.propertyAddress.street}, ${enrichment.propertyAddress.city}, ${enrichment.propertyAddress.state} ${enrichment.propertyAddress.zipCode}`
+          : "";
         infoWindowRef.current?.setContent(
-          `<div style="font-family: sans-serif; font-size: 13px; max-width: 220px;">
+          `<div style="font-family: sans-serif; font-size: 13px; max-width: 240px;">
             <div style="font-weight: 600; margin-bottom: 4px; color: ${cls.color};">${cls.title}</div>
-            <div style="color: #666;">${wb.name || wb.type}</div>
+            <div style="color: #333; font-weight: 500;">${wb.name || wb.type}</div>
+            ${ownerName ? `<div style="color: #555; margin-top: 4px;">👤 ${ownerName}</div>` : ""}
+            ${addrFull ? `<div style="color: #666; font-size: 12px; margin-top: 2px;">📍 ${addrFull}</div>` : ""}
             <div style="font-size: 11px; color: #999; margin-top: 4px;">
-              Classification: ${propType.charAt(0).toUpperCase() + propType.slice(1)}
+              ${propType.charAt(0).toUpperCase() + propType.slice(1)}
             </div>
           </div>`
         );
         infoWindowRef.current?.open(map, marker);
       });
+
+      // Also add a small address label below the marker if address is known
+      if (addrLine) {
+        const labelMarker = new google.maps.Marker({
+          position: enrichment
+            ? { lat: enrichment.latitude, lng: enrichment.longitude }
+            : { lat: wb.center.lat, lng: wb.center.lng },
+          map,
+          icon: {
+            path: "M 0,0",
+            fillOpacity: 0,
+            strokeOpacity: 0,
+            scale: 0,
+          },
+          label: {
+            text: addrLine,
+            color: "#374151",
+            fontSize: "9px",
+            fontWeight: "500",
+            className: "map-address-label",
+          },
+          clickable: false,
+          zIndex: 5,
+        });
+        markerRefs.current.push(labelMarker);
+      }
 
       markerRefs.current.push(marker);
     }
@@ -872,6 +944,9 @@ export default function MapView({
   showWaterBodies = true,
   showPropertyTypes = false,
   propertyTypesMap = new Map<string, string>(),
+  propertyEnrichmentMap = new Map<string, PropertyLookupEnrichment>(),
+  onPropertyEnrichmentLoaded,
+  onMapAddressLookup,
   onPropertyTypesLoaded,
   waterBodiesForPropertyLookup = [],
   focusLocation = null,
@@ -1034,7 +1109,9 @@ export default function MapView({
                 </>
               )}
               {/* Census income overlay (rendered below water bodies) */}
-              {showCensusOverlay && censusTracts.length > 0 && (
+              {s  propertyEnrichmentMap={propertyEnrichmentMap}
+                  onPropertyEnrichmentLoaded={onPropertyEnrichmentLoaded}
+                howCensusOverlay && censusTracts.length > 0 && (
                 <CensusOverlayLayer tracts={censusTracts} />
               )}
               {/* Property type overlay (business vs residential markers) */}

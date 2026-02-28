@@ -250,38 +250,46 @@ export class SmartyService {
 
   /**
    * Look up property by coordinates (reverse geocode then property lookup).
-   * Tries the exact coordinates first. If that fails, tries nearby offsets
-   * to find the nearest property on shore (water body centers are in the water).
+   * Tries the exact coordinates first. If that fails, tries concentric rings
+   * of probe points at increasing distances to find shore-side properties.
+   * Water body centers are typically in the water, so we cast outward.
    */
   async lookupPropertyByCoordinates(
     latitude: number,
     longitude: number,
-    searchRadiusMeters: number = 200
+    searchRadiusMeters: number = 500
   ): Promise<PropertyLookupResult | null> {
     // Try exact coordinates first
     const direct = await this._reverseAndLookup(latitude, longitude);
-    if (direct && direct.propertyType !== "unknown") return direct;
+    if (direct && direct.ownerName) return direct;
 
-    // The exact center is probably in water. Try offsets at N/S/E/W of the center
-    // at increasing distances to find a shore/property address.
-    const offsetDegrees = searchRadiusMeters / 111320; // rough meters → degrees
-    const offsets = [
-      { lat: offsetDegrees, lng: 0 },                 // North
-      { lat: -offsetDegrees, lng: 0 },                // South
-      { lat: 0, lng: offsetDegrees },                  // East
-      { lat: 0, lng: -offsetDegrees },                 // West
-      { lat: offsetDegrees * 0.7, lng: offsetDegrees * 0.7 },   // NE
-      { lat: -offsetDegrees * 0.7, lng: offsetDegrees * 0.7 },  // SE
-      { lat: offsetDegrees * 0.7, lng: -offsetDegrees * 0.7 },  // NW
-      { lat: -offsetDegrees * 0.7, lng: -offsetDegrees * 0.7 }, // SW
-    ];
+    // Concentric rings: 100m, 250m, 500m — 8 cardinal/intercardinal probes each
+    const distances = [100, 250, searchRadiusMeters];
+    const angles = [0, 45, 90, 135, 180, 225, 270, 315]; // 8 directions
 
-    for (const offset of offsets) {
-      const result = await this._reverseAndLookup(
-        latitude + offset.lat,
-        longitude + offset.lng
+    for (const dist of distances) {
+      const offsetDeg = dist / 111320;
+      const cosLat = Math.cos((latitude * Math.PI) / 180);
+
+      // Run all 8 directions for this ring in parallel
+      const probes = angles.map((angleDeg) => {
+        const rad = (angleDeg * Math.PI) / 180;
+        const dLat = offsetDeg * Math.cos(rad);
+        const dLng = (offsetDeg * Math.sin(rad)) / cosLat;
+        return this._reverseAndLookup(latitude + dLat, longitude + dLng);
+      });
+
+      const results = await Promise.all(probes);
+
+      // Pick the first result with an actual owner name
+      const found = results.find((r) => r && r.ownerName);
+      if (found) return found;
+
+      // Otherwise pick any result with a property address
+      const partial = results.find(
+        (r) => r && r.propertyAddress?.street
       );
-      if (result && result.ownerName) return result;
+      if (partial) return partial;
     }
 
     // Return whatever we got from the direct lookup (partial data is better than nothing)

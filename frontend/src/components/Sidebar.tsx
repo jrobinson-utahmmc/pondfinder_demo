@@ -175,29 +175,29 @@ export default function Sidebar({
   };
 
   return (
-    <aside className="w-80 bg-white border-r border-gray-200 flex flex-col shrink-0 h-full">
+    <aside className="w-full bg-white border-r border-gray-200 flex flex-col shrink-0 h-full overflow-hidden">
       {/* Header with tabs */}
-      <div className="border-b border-gray-200">
+      <div className="border-b border-gray-200 shrink-0">
         <div className="flex">
           <button
             onClick={() => setActiveTab("regions")}
-            className={`flex-1 px-3 py-3 text-sm font-medium transition-colors ${
+            className={`flex-1 px-2 py-2.5 text-xs sm:text-sm font-medium transition-colors ${
               activeTab === "regions"
                 ? "text-blue-600 border-b-2 border-blue-600 bg-blue-50/50"
                 : "text-gray-500 hover:text-gray-700 hover:bg-gray-50"
             }`}
           >
-            📍 Regions
+            📍 <span className="hidden sm:inline">Regions</span>
           </button>
           <button
             onClick={() => setActiveTab("results")}
-            className={`flex-1 px-3 py-3 text-sm font-medium transition-colors relative ${
+            className={`flex-1 px-2 py-2.5 text-xs sm:text-sm font-medium transition-colors relative ${
               activeTab === "results"
                 ? "text-blue-600 border-b-2 border-blue-600 bg-blue-50/50"
                 : "text-gray-500 hover:text-gray-700 hover:bg-gray-50"
             }`}
           >
-            🌊 Results
+            🌊 <span className="hidden sm:inline">Results</span>
             {waterBodies.length > 0 && (
               <span className="ml-1.5 bg-blue-500 text-white text-xs rounded-full px-1.5 py-0.5">
                 {waterBodies.length}
