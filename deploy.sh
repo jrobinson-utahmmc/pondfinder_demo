@@ -108,16 +108,27 @@ systemctl start mongod || true
 ok "MongoDB running"
 
 # ---------------------------------------------------------------------------
+# Helper: run command as repo owner (skip sudo if already that user)
+# ---------------------------------------------------------------------------
+run_as_owner() {
+  if [[ "$REPO_OWNER" == "root" ]] || [[ "$(whoami)" == "$REPO_OWNER" ]]; then
+    "$@"
+  else
+    sudo -u "$REPO_OWNER" "$@"
+  fi
+}
+
+# ---------------------------------------------------------------------------
 # 3. Install npm dependencies
 # ---------------------------------------------------------------------------
 info "Installing backend dependencies..."
 cd "$PROJECT_DIR"
-sudo -u "$REPO_OWNER" npm ci --omit=dev 2>/dev/null || sudo -u "$REPO_OWNER" npm install --omit=dev
+run_as_owner npm ci --omit=dev 2>/dev/null || run_as_owner npm install --omit=dev
 ok "Backend dependencies installed"
 
 info "Installing frontend dependencies..."
 cd "$FRONTEND_DIR"
-sudo -u "$REPO_OWNER" npm ci 2>/dev/null || sudo -u "$REPO_OWNER" npm install
+run_as_owner npm ci 2>/dev/null || run_as_owner npm install
 ok "Frontend dependencies installed"
 
 # ---------------------------------------------------------------------------
@@ -126,8 +137,8 @@ ok "Frontend dependencies installed"
 info "Building backend..."
 cd "$PROJECT_DIR"
 # Need devDependencies (typescript) for build, reinstall with them
-sudo -u "$REPO_OWNER" npm install
-sudo -u "$REPO_OWNER" npx tsc
+run_as_owner npm install
+run_as_owner npx --yes tsc
 ok "Backend built → dist/"
 
 # ---------------------------------------------------------------------------
@@ -135,7 +146,7 @@ ok "Backend built → dist/"
 # ---------------------------------------------------------------------------
 info "Building frontend..."
 cd "$FRONTEND_DIR"
-sudo -u "$REPO_OWNER" npx next build
+run_as_owner npm run build
 ok "Frontend built"
 
 # ---------------------------------------------------------------------------
@@ -236,7 +247,7 @@ Type=simple
 User=${REPO_OWNER}
 Group=${REPO_GROUP}
 WorkingDirectory=${FRONTEND_DIR}
-ExecStart=$(command -v npx) next start -p 3000
+ExecStart=$(command -v npm) run start -- -p 3000
 Restart=on-failure
 RestartSec=5
 StandardOutput=journal
