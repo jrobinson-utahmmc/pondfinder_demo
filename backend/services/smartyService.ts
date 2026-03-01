@@ -77,8 +77,15 @@ export interface PropertyLookupResult {
   };
   parcelId: string;
   propertyType: string;
+  landUseGroup: string;
   lotSizeAcres: number;
   marketValue: number;
+  yearBuilt: number;
+  bedrooms: number;
+  bathrooms: number;
+  buildingSqft: number;
+  stories: number;
+  taxAmount: number;
   latitude: number;
   longitude: number;
   smartyLookupId: string;
@@ -319,36 +326,71 @@ export class SmartyService {
   }
 
   /**
-   * Parse the property data response from Smarty Enrichment API.
+   * Parse the property data response from Smarty US Address Enrichment API.
+   * Response wraps in { "us-property-data-principal": [{ attributes: {...} }] }
    */
   private parsePropertyData(
     data: any,
     validated: SmartyAddressResult,
     smartyKey: string
   ): PropertyLookupResult {
-    const attributes = data?.[0]?.attributes || {};
+    // Smarty enrichment wraps data under "us-property-data-principal" key
+    const principalArray = data?.["us-property-data-principal"] || data || [];
+    const entry = Array.isArray(principalArray) ? principalArray[0] : principalArray;
+    const attr = entry?.attributes || {};
+
+    // Owner name: prefer deed_owner_full_name, fall back to owner_full_name
+    const ownerName = attr["deed_owner_full_name"] || attr["owner_full_name"] || "";
+    const firstName = attr["first_name"] || "";
+    const lastName = attr["last_name"] || "";
+    // Company flag ("Y"/"N") — if "Y", owner is a company
+    const isCompany = attr["company_flag"] === "Y";
+    const companyName = isCompany ? ownerName : "";
+
+    // Mailing / contact address
+    const mailingStreet = attr["contact_full_address"] || attr["contact_street"] || "";
+    const mailingCity = attr["contact_city"] || "";
+    const mailingState = attr["contact_state"] || "";
+    const mailingZip = attr["contact_zip"] || "";
+
+    // Property address
+    const propertyStreet = attr["property_address_full"] || validated.delivery_line_1;
+    const propertyCity = attr["property_address_city"] || validated.components.city_name || validated.components.default_city_name || "";
+    const propertyState = attr["property_address_state"] || validated.components.state_abbreviation || "";
+    const propertyZip = attr["property_address_zipcode"] || validated.components.zipcode || "";
+
+    // Land use
+    const propertyType = attr["land_use_standard"] || attr["land_use_group"] || "unknown";
+    const landUseGroup = attr["land_use_group"] || "";
 
     return {
-      ownerName: attributes["1st_owner_name"] || "",
-      firstName: attributes["1st_owner_name_first"] || "",
-      lastName: attributes["1st_owner_name_last"] || "",
-      companyName: attributes["company_name"] || "",
+      ownerName,
+      firstName,
+      lastName,
+      companyName,
       mailingAddress: {
-        street: attributes["mail_address"] || "",
-        city: attributes["mail_city"] || "",
-        state: attributes["mail_state"] || "",
-        zipCode: attributes["mail_zip_code"] || "",
+        street: mailingStreet,
+        city: mailingCity,
+        state: mailingState,
+        zipCode: mailingZip,
       },
       propertyAddress: {
-        street: validated.delivery_line_1,
-        city: validated.components.city_name || validated.components.default_city_name || "",
-        state: validated.components.state_abbreviation || "",
-        zipCode: validated.components.zipcode || "",
+        street: propertyStreet,
+        city: propertyCity,
+        state: propertyState,
+        zipCode: propertyZip,
       },
-      parcelId: attributes["parcel_id"] || "",
-      propertyType: attributes["property_use_type"] || "unknown",
-      lotSizeAcres: parseFloat(attributes["lot_size_acres"]) || 0,
-      marketValue: parseFloat(attributes["assessed_total_value"]) || 0,
+      parcelId: attr["parcel_raw_number"] || "",
+      propertyType,
+      landUseGroup,
+      lotSizeAcres: parseFloat(attr["acres"]) || 0,
+      marketValue: parseFloat(attr["total_market_value"]) || 0,
+      yearBuilt: parseInt(attr["year_built"], 10) || 0,
+      bedrooms: parseInt(attr["bedrooms"], 10) || 0,
+      bathrooms: parseFloat(attr["bathrooms_total"]) || 0,
+      buildingSqft: parseFloat(attr["building_sqft"]) || 0,
+      stories: parseFloat(attr["stories_number"]) || 0,
+      taxAmount: parseFloat(attr["tax_billed_amount"]) || 0,
       latitude: validated.metadata.latitude,
       longitude: validated.metadata.longitude,
       smartyLookupId: smartyKey,
@@ -376,8 +418,15 @@ export class SmartyService {
       },
       parcelId: "",
       propertyType: "unknown",
+      landUseGroup: "",
       lotSizeAcres: 0,
       marketValue: 0,
+      yearBuilt: 0,
+      bedrooms: 0,
+      bathrooms: 0,
+      buildingSqft: 0,
+      stories: 0,
+      taxAmount: 0,
       latitude: validated.metadata.latitude,
       longitude: validated.metadata.longitude,
       smartyLookupId: smartyKey,

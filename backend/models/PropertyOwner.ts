@@ -24,8 +24,15 @@ export interface IPropertyOwner extends Document {
   phone: string;
   email: string;
   propertyType: string;
+  landUseGroup: string;
   lotSizeAcres: number;
   marketValue: number;
+  yearBuilt: number;
+  bedrooms: number;
+  bathrooms: number;
+  buildingSqft: number;
+  stories: number;
+  taxAmount: number;
   coordinates: {
     type: "Point";
     coordinates: number[]; // [lng, lat]
@@ -88,11 +95,40 @@ const propertyOwnerSchema = new Schema<IPropertyOwner>(
       trim: true,
       default: "unknown",
     },
+    landUseGroup: {
+      type: String,
+      trim: true,
+      default: "",
+    },
     lotSizeAcres: {
       type: Number,
       default: 0,
     },
     marketValue: {
+      type: Number,
+      default: 0,
+    },
+    yearBuilt: {
+      type: Number,
+      default: 0,
+    },
+    bedrooms: {
+      type: Number,
+      default: 0,
+    },
+    bathrooms: {
+      type: Number,
+      default: 0,
+    },
+    buildingSqft: {
+      type: Number,
+      default: 0,
+    },
+    stories: {
+      type: Number,
+      default: 0,
+    },
+    taxAmount: {
       type: Number,
       default: 0,
     },

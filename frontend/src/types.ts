@@ -102,8 +102,15 @@ export interface PropertyOwner {
   phone: string;
   email: string;
   propertyType: string;
+  landUseGroup: string;
   lotSizeAcres: number;
   marketValue: number;
+  yearBuilt: number;
+  bedrooms: number;
+  bathrooms: number;
+  buildingSqft: number;
+  stories: number;
+  taxAmount: number;
   coordinates: GeoPoint;
   waterFeatures: WaterFeature[] | string[];
   smartyLookupId: string;
